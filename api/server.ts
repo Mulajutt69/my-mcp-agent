@@ -105,6 +105,63 @@ export default {
         });
       });
     }
+    // ✅ A2A agent-card endpoint — what 8004scan checks for A2A
+    if (url.pathname === "/.well-known/agent-card.json") {
+      return new Response(JSON.stringify({
+        schema_version: "v1",
+        name: "My-Celo-Agent",
+        description: "AI agent for Celo payments and financial services",
+        version: "1.0.0",
+        url: `${url.origin}`,
+        capabilities: {
+          streaming: false,
+          pushNotifications: false,
+          stateTransitionHistory: false
+        },
+        defaultInputModes: ["application/json"],
+        defaultOutputModes: ["application/json"],
+        skills: [
+          {
+            id: "topup_mobile",
+            name: "Mobile Top Up",
+            description: "Top up mobile number with airtime or data",
+            tags: ["payments", "telecom", "celo"],
+            inputModes: ["application/json"],
+            outputModes: ["application/json"]
+          },
+          {
+            id: "check_balance",
+            name: "Check Balance",
+            description: "Check balance of a Celo wallet address",
+            tags: ["wallet", "balance", "celo"],
+            inputModes: ["application/json"],
+            outputModes: ["application/json"]
+          },
+          {
+            id: "fetch_price",
+            name: "Fetch Token Price",
+            description: "Get current price of crypto tokens",
+            tags: ["price", "defi", "celo"],
+            inputModes: ["application/json"],
+            outputModes: ["application/json"]
+          },
+          {
+            id: "pay_utility",
+            name: "Pay Utility Bill",
+            description: "Pay electricity, water, internet bills",
+            tags: ["payments", "utility", "celo"],
+            inputModes: ["application/json"],
+            outputModes: ["application/json"]
+          }
+        ]
+      }), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        }
+      });
+    }
 
     // ✅ Home page
     return new Response(JSON.stringify({
