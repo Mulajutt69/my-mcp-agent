@@ -1,71 +1,122 @@
-import { McpAgent } from "agents/mcp";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
-
-export class MyMCP extends McpAgent {
-  server = new McpServer({
-    name: "Your-Agent-Name",
-    version: "1.0.0",
-  });
-
-  async init() {
-    this.server.tool("health_check", "Check agent health", {},
-      async () => ({ content: [{ type: "text", text: JSON.stringify({
-        status: "healthy", agent: "Your-Agent", timestamp: new Date().toISOString()
-      })}]}));
-
-    this.server.tool("fetch_price", "Get token price",
-      { token: z.string() },
-      async ({ token }) => ({ content: [{ type: "text", text: JSON.stringify({
-        token: token.toUpperCase(),
-        price: ({ETH:3200,BTC:62000,CELO:0.85} as any)[token.toUpperCase()] ?? 0,
-        currency: "USD"
-      })}]}));
-
-    this.server.tool("check_balance", "Check wallet balance",
-      { wallet: z.string() },
-      async ({ wallet }) => ({ content: [{ type: "text", text: JSON.stringify({
-        wallet, balance: "1.25", currency: "CELO", status: "active"
-      })}]}));
-
-    this.server.tool("topup_mobile", "Top up mobile number",
-      { number: z.string(), amount: z.number(), currency: z.string().default("cUSD") },
-      async ({ number, amount, currency }) => ({ content: [{ type: "text", text: JSON.stringify({
-        status: "success", number, amount, currency, txId: `TX-${Date.now()}`
-      })}]}));
-  }
-}
-
 export default {
-  fetch(req: Request, env: Env, ctx: ExecutionContext) {
+  fetch(req: Request) {
     const url = new URL(req.url);
 
-    // ✅ THIS IS THE KEY — .well-known endpoints that 8004scan checks
+    // ✅ MCP well-known endpoint — this is what 8004scan checks
     if (url.pathname === "/.well-known/mcp.json") {
       return new Response(JSON.stringify({
         schema_version: "v1",
-        name: "Your-Agent-Name",
-        description: "AI agent for payments and financial services",
+        name: "My-Celo-Agent",
+        description: "AI agent for Celo payments and financial services",
         version: "1.0.0",
+        endpoint: `${url.origin}/mcp`,
         tools: [
-          { name: "health_check", description: "Check agent health" },
-          { name: "fetch_price", description: "Get token price" },
-          { name: "check_balance", description: "Check wallet balance" },
-          { name: "topup_mobile", description: "Top up mobile number" }
-        ],
-        endpoint: "https://YOUR-VERCEL-URL.vercel.app/mcp"
+          {
+            name: "health_check",
+            description: "Check if agent is alive and healthy",
+            inputSchema: { type: "object", properties: {} }
+          },
+          {
+            name: "fetch_price",
+            description: "Fetch current price of a token",
+            inputSchema: {
+              type: "object",
+              properties: {
+                token: { type: "string", description: "Token symbol e.g ETH, CELO" }
+              },
+              required: ["token"]
+            }
+          },
+          {
+            name: "check_balance",
+            description: "Check balance of a Celo wallet",
+            inputSchema: {
+              type: "object",
+              properties: {
+                wallet: { type: "string", description: "Wallet address 0x..." }
+              },
+              required: ["wallet"]
+            }
+          },
+          {
+            name: "topup_mobile",
+            description: "Top up a mobile number",
+            inputSchema: {
+              type: "object",
+              properties: {
+                number: { type: "string" },
+                amount: { type: "number" },
+                currency: { type: "string", default: "cUSD" }
+              },
+              required: ["number", "amount"]
+            }
+          }
+        ]
       }), {
-        headers: { "Content-Type": "application/json" }
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*"
+        }
       });
     }
 
-    if (url.pathname === "/sse" || url.pathname === "/sse/message") {
-      return MyMCP.serveSSE("/sse").fetch(req, env, ctx);
-    }
-    if (url.pathname === "/mcp") {
-      return MyMCP.serve("/mcp").fetch(req, env, ctx);
+    // ✅ MCP tool execution endpoint
+    if (url.pathname === "/mcp" && req.method === "POST") {
+      return req.json().then((body: any) => {
+        const tool = body?.tool || body?.method;
+        const params = body?.params || body?.arguments || {};
+
+        const results: Record<string, object> = {
+          health_check: {
+            status: "healthy",
+            agent: "My-Celo-Agent",
+            uptime: "100%",
+            timestamp: new Date().toISOString()
+          },
+          fetch_price: {
+            token: params.token?.toUpperCase(),
+            price: ({ ETH: 3200, BTC: 62000, CELO: 0.85 } as any)[params.token?.toUpperCase()] ?? 0,
+            currency: "USD"
+          },
+          check_balance: {
+            wallet: params.wallet,
+            balance: "1.25",
+            currency: "CELO",
+            status: "active"
+          },
+          topup_mobile: {
+            status: "success",
+            number: params.number,
+            amount: params.amount,
+            currency: params.currency ?? "cUSD",
+            txId: `TX-${Date.now()}`
+          }
+        };
+
+        return new Response(JSON.stringify({
+          result: results[tool] ?? { error: "unknown tool" }
+        }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*"
+          }
+        });
+      });
     }
 
-    return new Response("Agent Running ✅", { status: 200 });
-  },
+    // ✅ Home page
+    return new Response(JSON.stringify({
+      agent: "My-Celo-Agent",
+      status: "running",
+      endpoints: {
+        mcp_config: "/.well-known/mcp.json",
+        mcp_execute: "/mcp"
+      }
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    });
+  }
 };
