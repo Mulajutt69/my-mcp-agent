@@ -4,109 +4,68 @@ import { z } from "zod";
 
 export class MyMCP extends McpAgent {
   server = new McpServer({
-    name: "Toppa-Celo-Agent",
+    name: "Your-Agent-Name",
     version: "1.0.0",
   });
 
   async init() {
+    this.server.tool("health_check", "Check agent health", {},
+      async () => ({ content: [{ type: "text", text: JSON.stringify({
+        status: "healthy", agent: "Your-Agent", timestamp: new Date().toISOString()
+      })}]}));
 
-    // Tool 1 — Health Check
-    this.server.tool(
-      "health_check",
-      "Check if agent is alive and healthy",
-      {},
-      async () => ({
-        content: [{ type: "text", text: JSON.stringify({
-          status: "healthy",
-          agent: "Toppa-Celo",
-          uptime: "100%",
-          timestamp: new Date().toISOString()
-        })}]
-      })
-    );
+    this.server.tool("fetch_price", "Get token price",
+      { token: z.string() },
+      async ({ token }) => ({ content: [{ type: "text", text: JSON.stringify({
+        token: token.toUpperCase(),
+        price: ({ETH:3200,BTC:62000,CELO:0.85} as any)[token.toUpperCase()] ?? 0,
+        currency: "USD"
+      })}]}));
 
-    // Tool 2 — Fetch Token Price
-    this.server.tool(
-      "fetch_price",
-      "Fetch current price of a token",
-      { token: z.string().describe("Token symbol e.g. ETH, CELO, BTC") },
-      async ({ token }) => ({
-        content: [{ type: "text", text: JSON.stringify({
-          token: token.toUpperCase(),
-          price: ({ ETH: 3200, BTC: 62000, CELO: 0.85 } as any)[token.toUpperCase()] ?? "N/A",
-          currency: "USD"
-        })}]
-      })
-    );
+    this.server.tool("check_balance", "Check wallet balance",
+      { wallet: z.string() },
+      async ({ wallet }) => ({ content: [{ type: "text", text: JSON.stringify({
+        wallet, balance: "1.25", currency: "CELO", status: "active"
+      })}]}));
 
-    // Tool 3 — Check Wallet Balance
-    this.server.tool(
-      "check_balance",
-      "Check balance of a Celo wallet address",
-      { wallet: z.string().describe("Wallet address starting with 0x") },
-      async ({ wallet }) => ({
-        content: [{ type: "text", text: JSON.stringify({
-          wallet,
-          balance: "1.25",
-          currency: "CELO",
-          status: "active"
-        })}]
-      })
-    );
-
-    // Tool 4 — Mobile Top Up
-    this.server.tool(
-      "topup_mobile",
-      "Top up a mobile number with airtime or data",
-      {
-        number: z.string().describe("Mobile number to top up"),
-        amount: z.number().describe("Amount to send"),
-        currency: z.string().default("cUSD").describe("Currency")
-      },
-      async ({ number, amount, currency }) => ({
-        content: [{ type: "text", text: JSON.stringify({
-          status: "success",
-          number,
-          amount,
-          currency,
-          txId: `TX-${Date.now()}`
-        })}]
-      })
-    );
-
-    // Tool 5 — Pay Utility Bill
-    this.server.tool(
-      "pay_utility",
-      "Pay a utility bill (electricity, water, etc)",
-      {
-        bill_type: z.string().describe("Type: electricity, water, internet"),
-        reference: z.string().describe("Bill reference number"),
-        amount: z.number().describe("Amount to pay")
-      },
-      async ({ bill_type, reference, amount }) => ({
-        content: [{ type: "text", text: JSON.stringify({
-          status: "queued",
-          bill_type,
-          reference,
-          amount,
-          currency: "cUSD",
-          txId: `BILL-${Date.now()}`
-        })}]
-      })
-    );
-
+    this.server.tool("topup_mobile", "Top up mobile number",
+      { number: z.string(), amount: z.number(), currency: z.string().default("cUSD") },
+      async ({ number, amount, currency }) => ({ content: [{ type: "text", text: JSON.stringify({
+        status: "success", number, amount, currency, txId: `TX-${Date.now()}`
+      })}]}));
   }
 }
 
 export default {
   fetch(req: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(req.url);
+
+    // ✅ THIS IS THE KEY — .well-known endpoints that 8004scan checks
+    if (url.pathname === "/.well-known/mcp.json") {
+      return new Response(JSON.stringify({
+        schema_version: "v1",
+        name: "Your-Agent-Name",
+        description: "AI agent for payments and financial services",
+        version: "1.0.0",
+        tools: [
+          { name: "health_check", description: "Check agent health" },
+          { name: "fetch_price", description: "Get token price" },
+          { name: "check_balance", description: "Check wallet balance" },
+          { name: "topup_mobile", description: "Top up mobile number" }
+        ],
+        endpoint: "https://YOUR-VERCEL-URL.vercel.app/mcp"
+      }), {
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
     if (url.pathname === "/sse" || url.pathname === "/sse/message") {
       return MyMCP.serveSSE("/sse").fetch(req, env, ctx);
     }
     if (url.pathname === "/mcp") {
       return MyMCP.serve("/mcp").fetch(req, env, ctx);
     }
-    return new Response("Toppa-Celo MCP Agent Running ✅", { status: 200 });
+
+    return new Response("Agent Running ✅", { status: 200 });
   },
 };
